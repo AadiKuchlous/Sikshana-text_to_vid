@@ -39,10 +39,12 @@ def create_images(text):
 	prefix = ""
 	images = []
 	for i in range(len(words)):
+		if words[i] in "-:":
+			continue
 		prefix = ' '.join(words[0:i])
 		highlighted_word = '<span style="color:red;">' + words[i] + '</span>'
 		suffix = ' '.join(words[i + 1: len(words)])
-		img = '<div style="height: 360px; display: flex; justify-content: center; align-items: flex-end; padding: 10px"><img src="img.jpg" style="width: 200px;"></img></div>'
+		img = '<div style="height: 360px; display: flex; justify-content: center; align-items: flex-end; padding: 10px"><img src="img.jpg" style="width: 350px;"></img></div>'
 		br = '<br>'
 		text = '<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;"><p>{}</p></div>'.format(prefix + ' ' + highlighted_word + ' ' + suffix)
 		html = '<!DOCTYPE html><html><body><div id="vid_area" style="height: 720px; width: 1280px;"><h1 style="font-size: 3.5rem">{0}{1}{2}</h1></div></body></html>'.format(img, br, text)
@@ -50,15 +52,17 @@ def create_images(text):
 			f.write(html)
 		cmd = "node pup.js file://{0}/tmp.html images/{1}.jpg".format(os.getcwd(), str(i))
 		os.system(cmd)
-		images.append("images/{}".format(i))
+		images.append("images/{}.jpg".format(i))
+	
+	return(images)
 
 def concatenate_videos(videos, output_name):
 	with open('con.in', 'w') as f:
 		for video in videos:
 			f.write("file '{}'\n".format(video))
-	os.system("ffmpeg -y -f concat -safe 0 -i con.in -strict -2  -max_muxing_queue_size 2048 -tune animation -crf 6 {}".format(output_name))
+	os.system("ffmpeg -y -f concat -safe 0 -i con.in -strict -2 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {}".format(output_name))
 
-def create_para_vid(speed, i, time_data, audio, output_name):
+def create_para_vid(speed, i, time_data, images, audio, output_name):
 	end_times = []
 	time_data_l = 0
 	for l in time_data.iter_lines():
@@ -70,22 +74,20 @@ def create_para_vid(speed, i, time_data, audio, output_name):
 
 	with open("ffmp.in", "w") as f:
 		prev_time = 0.0
-		for j in range(len(end_times)):
+		for j in range(len(images)-1):
 			duration = float(end_times[j]) - prev_time
-			f.write("file \'images/{0}.jpg\' \n".format(j))
+			f.write("file {0}' \n".format(images[j]))
 			f.write("duration {} \n".format(duration))
 			prev_time = float(end_times[j])
 
-		f.write("file \'images/{0}.jpg\' \n".format(len(end_times)))
+		f.write("file '{0}' \n".format(images[-1]))
 		f.write("duration {} \n".format(prev_time+0.5))
 	os.system("ffmpeg -y -i {0} -f concat -i ffmp.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {1}nf.mp4".format(audio, output_name))
-	# os.system('ffmpeg -y -i mid.mp4 -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1:color=white" {0}nf.mp4'.format(output_name))
 	with open('blank.in', 'w') as f:
-		f.write('\n'.join(["file \'images/{0}.jpg\'".format(time_data_l-1), "duration {}".format("1")]))
+		f.write('\n'.join(["file '{0}'".format(images[-1]), "duration {}".format("1")]))
 	os.system("ffmpeg -y -i {0} -f concat -i blank.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 fill{1}.mp4".format("blank.mp3", str(i)))
-	# os.system('ffmpeg -y -i mid.mp4 -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1:color=white" fill{}.mp4'.format(str(i+1)))
 	output_name_mp4 = output_name + '.mp4'
-	concatenate_videos(['{0}nf.mp4'.format(output_name), 'fill{}.mp4'.format(str(i))], output_name_mp4)
+	concatenate_videos(['{0}nf.mp4'.format(output_name), 'fill{}.mp4'.format(i)], output_name_mp4)
 
 def create_vids_from_excel(file_dir):
 	os.system('mkdir images')
@@ -94,7 +96,9 @@ def create_vids_from_excel(file_dir):
 	slow_videos = []
 	split_videos = []
 	sheet = read_excel(file_dir)
-	for i in range(3, sheet.max_row+1):
+	start = 3
+	end = sheet.max_row+1
+	for i in range(start, end):
 		para = sheet.cell(row=i, column=1).value
 		polly_para = para.replace('*', '.')
 		json_data = polly_json(polly_para)
@@ -112,19 +116,19 @@ def create_vids_from_excel(file_dir):
 		os.system("ffmpeg -y -i {} -ar 48000 {}".format("audio_uf.mp3", "audio_split.mp3"))
 		images = create_images(para.replace('*', ''))
 
-		create_para_vid(1, i-2, json_data, 'audio.mp3', "vid{}".format(str(i-2)))
-		create_para_vid(0.75, i-2, json_data_slow, 'audio_slow.mp3', "vid{}-slow".format(str(i-2)))
-		create_para_vid(1, i-2, json_data_split, 'audio_split.mp3', "vid{}-split".format(str(i-2)))
+		create_para_vid(1, i-start+1, json_data, images, 'audio.mp3', "vid{}".format(str(i-start+1)))
+		# create_para_vid(0.75, i-2, json_data_slow, 'audio_slow.mp3', "vid{}-slow".format(str(i-2)))
+		# create_para_vid(1, i-2, json_data_split, 'audio_split.mp3', "vid{}-split".format(str(i-2)))
 
-		normal_videos.append("vid{}.mp4".format(str(i-2)))
-		slow_videos.append("vid{}-slow.mp4".format(str(i-2)))
-		split_videos.append("vid{}-split.mp4".format(str(i-2)))
+		normal_videos.append("vid{}.mp4".format(str(i-start+1)))
+		slow_videos.append("vid{}-slow.mp4".format(str(i-start+1)))
+		split_videos.append("vid{}-split.mp4".format(str(i-start+1)))
 
 	os.system("mkdir final_videos")
 
-	concatenate_videos(normal_videos, "final_videos/final.mp4")
-	concatenate_videos(slow_videos, "final_videos/final_slow.mp4")
-	concatenate_videos(split_videos, "final_videos/final_split.mp4")
+	concatenate_videos(["intro.mp4"]+normal_videos, "final_videos/final.mp4")
+	# concatenate_videos(slow_videos, "final_videos/final_slow.mp4")
+	# concatenate_videos(split_videos, "final_videos/final_split.mp4")
 
 	# os.system("rm *.mp4")
 	# os.system("rm a*.mp3")
@@ -145,7 +149,11 @@ def create_intro_video(file):
 	with open("intro.html", "w") as f:
 			f.write(html)
 	os.system("node pup.js file://{0}/intro.html images/{1}.jpg".format(os.getcwd(), "intro"))
-	os.system("ffmpeg -y -i {0} -f concat -i intro.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {1}.mp4".format("intro_audio.mp3", "intro"))
+	os.system("ffmpeg -y -i {0} -f concat -i intro.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {1}.mp4".format("intro_audio.mp3", "intronf"))
+	with open('blank.in', 'w') as f:
+		f.write('\n'.join(["file \'images/{0}.jpg\'".format("intro"), "duration {}".format("2.5")]))
+	os.system("ffmpeg -y -i {0} -f concat -i blank.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 fill{1}.mp4".format("blank.mp3", "intro"))
+	concatenate_videos(["intronf.mp4", "fillintro.mp4"], "intro.mp4")
 	return("intro.mp4")
 
 
