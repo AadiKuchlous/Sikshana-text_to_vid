@@ -26,41 +26,64 @@ def aws_polly(text, data_type):
 
 	return(response['AudioStream'])
 
+
 def polly_audio(text):
 	audio_data = aws_polly(text, "mp3")
 	return(audio_data)
+
 
 def polly_json(text):
 	json_data = aws_polly(text, "json")
 	return(json_data)
 
-def create_images(text):
+
+def create_images(text, image):
 	words = text.split(' ')
-	prefix = ""
+	print(words)
 	images = []
 	for i in range(len(words)):
-		if words[i] in "-:":
-			continue
-		prefix = ' '.join(words[0:i])
-		highlighted_word = '<span style="color:red;">' + words[i] + '</span>'
-		suffix = ' '.join(words[i + 1: len(words)])
-		img = '<div style="height: 360px; display: flex; justify-content: center; align-items: flex-end; padding: 10px"><img src="img.jpg" style="width: 350px;"></img></div>'
+		text_html = ''
+		if words[i][0] in "-:#":
+				continue
+
+		for j in range(len(words)):
+			if words[j][0] == "#":
+				text_html += " "+("&nbsp"*len(words[j]))+" "
+				continue
+				continue
+
+			if j == i:
+				text_html += ' <span style="color:red;">' + words[j] + '</span>'
+			else:
+				text_html += " "+words[j]
+
+		img = '<div style="height: 360px; display: flex; justify-content: center; align-items: flex-end; padding: 10px"><img src="{}" style="width: 350px;"></img></div>'.format(image)
 		br = '<br>'
-		text = '<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;"><p>{}</p></div>'.format(prefix + ' ' + highlighted_word + ' ' + suffix)
-		html = '<!DOCTYPE html><html><body><div id="vid_area" style="height: 720px; width: 1280px;"><h1 style="font-size: 3.5rem">{0}{1}{2}</h1></div></body></html>'.format(img, br, text)
+
+		if type(image) == type(''):
+			text = '<h1 style="font-size: 6rem; margin: 0px"><p>{}</p></h1>'.format(text_html)
+			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;">{0}<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;">{1}</div></div></body></html>'.format(img, text)
+		else:
+			text = '<div style="height: 720px; display: flex; justify-content: center; align-items: center;"><p>{}</p></div>'.format(text_html)
+			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;"><h1 style="font-size: 7rem">{0}</h1></div></body></html>'.format(text)
+
 		with open("tmp.html", "w") as f:
 			f.write(html)
+
 		cmd = "node pup.js file://{0}/tmp.html images/{1}.jpg".format(os.getcwd(), str(i))
 		os.system(cmd)
+
 		images.append("images/{}.jpg".format(i))
 	
 	return(images)
+
 
 def concatenate_videos(videos, output_name):
 	with open('con.in', 'w') as f:
 		for video in videos:
 			f.write("file '{}'\n".format(video))
 	os.system("ffmpeg -y -f concat -safe 0 -i con.in -strict -2 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {}".format(output_name))
+
 
 def create_para_vid(speed, i, time_data, images, audio, output_name):
 	end_times = []
@@ -89,6 +112,7 @@ def create_para_vid(speed, i, time_data, images, audio, output_name):
 	output_name_mp4 = output_name + '.mp4'
 	concatenate_videos(['{0}nf.mp4'.format(output_name), 'fill{}.mp4'.format(i)], output_name_mp4)
 
+
 def create_vids_from_excel(file_dir):
 	os.system('mkdir images')
 	create_intro_video(file_dir)
@@ -100,7 +124,7 @@ def create_vids_from_excel(file_dir):
 	end = sheet.max_row+1
 	for i in range(start, end):
 		para = sheet.cell(row=i, column=1).value
-		polly_para = para.replace('*', '.')
+		polly_para = para.replace('*', '.').replace('#', '')
 		json_data = polly_json(polly_para)
 		json_data_slow = polly_json(polly_para)
 		audio_data = polly_audio(polly_para)
@@ -114,11 +138,14 @@ def create_vids_from_excel(file_dir):
 		with open('audio_uf.mp3', 'wb') as f:
 			f.write(audio_data_split.read())
 		os.system("ffmpeg -y -i {} -ar 48000 {}".format("audio_uf.mp3", "audio_split.mp3"))
-		images = create_images(para.replace('*', ''))
+
+		images_text = ' '.join(para.replace('*', '').split())
+		print(images_text)
+		images = create_images(images_text, sheet.cell(row=i, column=2).value)
 
 		create_para_vid(1, i-start+1, json_data, images, 'audio.mp3', "vid{}".format(str(i-start+1)))
-		# create_para_vid(0.75, i-2, json_data_slow, 'audio_slow.mp3', "vid{}-slow".format(str(i-2)))
-		# create_para_vid(1, i-2, json_data_split, 'audio_split.mp3', "vid{}-split".format(str(i-2)))
+		create_para_vid(0.75, i-2, json_data_slow, images, 'audio_slow.mp3', "vid{}-slow".format(str(i-2)))
+		create_para_vid(1, i-2, json_data_split, images, 'audio_split.mp3', "vid{}-split".format(str(i-2)))
 
 		normal_videos.append("vid{}.mp4".format(str(i-start+1)))
 		slow_videos.append("vid{}-slow.mp4".format(str(i-start+1)))
@@ -127,11 +154,14 @@ def create_vids_from_excel(file_dir):
 	os.system("mkdir final_videos")
 
 	concatenate_videos(["intro.mp4"]+normal_videos, "final_videos/final.mp4")
-	# concatenate_videos(slow_videos, "final_videos/final_slow.mp4")
-	# concatenate_videos(split_videos, "final_videos/final_split.mp4")
+	concatenate_videos(slow_videos, "final_videos/final_slow.mp4")
+	concatenate_videos(split_videos, "final_videos/final_split.mp4")
 
-	# os.system("rm *.mp4")
-	# os.system("rm a*.mp3")
+	os.system("rm *.mp4")
+	os.system("rm a*.mp3")
+	os.system("rm *.in")
+	os.system("rm a*.mp3")
+
 
 def create_intro_video(file):
 	sheet = read_excel(file)
@@ -161,4 +191,5 @@ def read_excel(path):
 	wb = openpyxl.load_workbook(path)
 	return(wb["Sheet1"])
 
+# read_excel("input.xlsx")
 create_vids_from_excel("input.xlsx")
