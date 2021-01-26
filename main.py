@@ -1,10 +1,9 @@
-#!/Library/Frameworks/Python.framework/Versions/3.6/bin/python3
-
+#!/Library/Frameworks/Python.framework/Versions/3.6/bin/python3.6
 import os
 import sys
 import boto3
 import openpyxl
-from PIL import Image, ImageChops
+#from PIL import Image, ImageChops
 
 
 
@@ -152,8 +151,7 @@ def create_para_vid(speed, i, time_data, images, audio, output_name):
 	concatenate_videos(['{0}nf.mp4'.format(output_name), 'fill{}.mp4'.format(i)], output_name_mp4)
 
 
-def create_intro_video(file):
-	sheet = read_excel(file)
+def create_intro_video(sheet):
 	text = (sheet.cell(row=2, column=2).value).split('\n')
 	audio_data = polly_audio('. '.join(text))
 	with open('audio_uf.mp3', 'wb') as f:
@@ -176,18 +174,18 @@ def create_intro_video(file):
 	return("intro.mp4")
 
 
-def read_excel(path):
+def read_excel(path, sheet):
 	wb = openpyxl.load_workbook(path)
-	return(wb["level 2"])
+	return(wb[sheet])
 
 
-def create_vids_from_excel(file_dir):
+def create_vids_from_excel(file_dir, sheet):
 	os.system('mkdir images')
-	create_intro_video(file_dir)
+	sheet = read_excel(file_dir, sheet)
+	create_intro_video(sheet)
 	normal_videos = []
 	slow_videos = []
 	split_videos = []
-	sheet = read_excel(file_dir)
 	start = 3
 	end = sheet.max_row
 	for i in range(start, end):
@@ -235,4 +233,4 @@ def create_vids_from_excel(file_dir):
 	os.system("rm -r images")
 
 #read_excel("input.xlsx")
-create_vids_from_excel("input 2.xlsx")
+create_vids_from_excel(str(sys.argv[1]), str(sys.argv[2]))
