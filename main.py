@@ -3,19 +3,31 @@ import os
 import sys
 import boto3
 import openpyxl
-#from PIL import Image, ImageChops
+import cv2
+import numpy as np
+from PIL import Image
 
 
 
-def trim(im):
-	img = Image.open(im)
-	img = img.convert('RGB')
-	bg = Image.new(img.mode, img.size, img.getpixel((0,0)))
-	diff = ImageChops.difference(img, bg)
-	diff = ImageChops.add(diff, diff, 2.0, -100)
-	bbox = diff.getbbox()
-	if bbox:
-		return img.crop(bbox).save(im)
+# def trim(im):
+# 	print("trim:{0}".format(im))
+# 	## (1) Convert to gray, and threshold
+# 	img = cv2.imread(im, cv2.IMREAD_UNCHANGED)
+# 	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+# 	th, threshed = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)
+
+# 	## (2) Morph-op to remove noise
+# 	kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
+# 	morphed = cv2.morphologyEx(threshed, cv2.MORPH_CLOSE, kernel)
+
+# 	## (3) Find the max-area contour
+# 	cnts = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
+# 	cnt = sorted(cnts, key=cv2.contourArea)[-1]
+
+# 	## (4) Crop and save it
+# 	x,y,w,h = cv2.boundingRect(cnt)
+# 	dst = img[y:y+h, x:x+w]
+# 	cv2.imwrite(im, dst)
 
 
 def aws_polly(text, data_type):
@@ -49,37 +61,49 @@ def polly_json(text):
 	return(json_data)
 
 
-def underline_html(text):
-	html = ""
-	first = True
-	for i in text:
-		if i != '_':
-			html += i
-		else:
-			if first:
-				html += '<u>'
-				first = False
-			else:
-				html += '</u>'
-				first = True
-	return html
+# def underline_html(text):
+# 	html = ""
+# 	first = True
+# 	for i in text:
+# 		if i != '_':
+# 			html += i
+# 		else:
+# 			if first:
+# 				html += '<u>'
+# 				first = False
+# 			else:
+# 				html += '</u>'
+# 				first = True
+# 	return html
 
+def underline_html(text):
+	return text.replace("._", "<u>").replace("_.", "</u>")
 
 def create_images(text, image):
 	no_of_lines = len(text.strip().split('\n'))
 	text = underline_html(text)
 	text = text.strip()
 	words = text.split(' ')
-	# print(words)
+	print("create_images words:{0}".format(words))
+	print(image)
 	images = []
+	image_name = "tmp.png"
+	if type(image) == type(''):
+		image_link = "https://drive.google.com/uc?export=download&id="+image.split('d/')[1].split('/view')[0]
+		print("link: "+image_link)
+		os.system("wget '{0}' -O '{1}'".format(image_link, image_name))
 	for i in range(len(words)):
 		text_html = ''
-		if words[i][0] in "-:#\n":
+		if words[i][0] in "-:#\n[":
 				continue
 
 		for j in range(len(words)):
 			if words[j][0] == "#":
-				text_html += "&nbsp;"*len(words[j])
+				text_html = text_html.strip()+"&nbsp;"*len(words[j])
+				continue
+
+			if words[j][0] == '[':
+				text_html += words[j][1:-1]
 				continue
 
 			if words[j] == '\n':
@@ -88,18 +112,17 @@ def create_images(text, image):
 
 			if j == i:
 				if words[j][-1] in ":":
-					text_html += '<span style="color:red;">' + words[j][0:-1] + '</span> ' + words[j][-1]
+					text_html += '<span style="color:red;">' + words[j][0:-1] + '</span>' + words[j][-1]
 				else:
 					text_html += '<span style="color:red;">' + words[j] + '</span> '
 			else:
 				text_html += words[j] + ' '
 
-		img = '<div style="height: 400px; display: flex; justify-content: center; align-items: flex-end; padding: 10px"><img src="{}" style="height: 350px;"></img></div>'.format(image)
 		br = '<br>'
 
 		if type(image) == type(''):
-			# trim(image)
-			text = '<h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0.5em; text-align:center">{1}</p></h1>'.format(7-no_of_lines, text_html)
+			img = '<div style="height:425px"><img src="{}" style="padding-top:30px"></img></div>'.format(image_name)
+			text = '<h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0px; text-align:center">{1}</p></h1>'.format(7-no_of_lines, text_html)
 			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;">{0}<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;">{1}</div></div></body></html>'.format(img, text)
 		else:
 			text = '<div style="height: 720px; display: flex; justify-content: center; align-items: center;"><p style="margin: 0.5em; text-align:center">{}</p></div>'.format(text_html)
@@ -132,6 +155,7 @@ def create_para_vid(speed, i, time_data, images, audio, output_name):
 		end_times.append(time)
 
 	end_times = end_times[1:]
+	print(end_times)
 
 	with open("ffmp.in", "w") as f:
 		prev_time = 0.0
@@ -174,25 +198,33 @@ def create_intro_video(sheet):
 	return("intro.mp4")
 
 
-def read_excel(path, sheet):
-	wb = openpyxl.load_workbook(path)
+def read_excel(drive_link, sheet):
+	name = "input.xlsx"
+	os.system("wget --no-check-certificate -r '{0}' -O {1}".format(drive_link, name))
+	wb = openpyxl.load_workbook(name)
 	return(wb[sheet])
 
 
-def create_vids_from_excel(file_dir, sheet):
+def create_vids_from_excel(drive_link, sheet):
 	os.system('mkdir images')
-	sheet = read_excel(file_dir, sheet)
+	sheet = read_excel(drive_link, sheet)
 	create_intro_video(sheet)
 	normal_videos = []
 	slow_videos = []
 	split_videos = []
 	start = 3
-	end = sheet.max_row
+	end = sheet.max_row+1
 	for i in range(start, end):
 		if not sheet.cell(row=i, column=1).value:
 			continue
 		para = sheet.cell(row=i, column=2).value
-		polly_para = para.replace('*', '.').replace('#', '').replace('_', '')
+		polly_para = para.replace("._", "").replace("_.", "").replace('*', '.').replace('#', '').replace('__', ' - ').replace('_', '').replace('\n','. ')
+		polly_para_split = polly_para.split()
+		polly_para = ""
+		for word in polly_para_split:
+			if word[0] != '[':
+				polly_para += word + " "
+		print("polly_para: "+polly_para)
 		json_data = polly_json(polly_para)
 		json_data_slow = polly_json(polly_para)
 		audio_data = polly_audio(polly_para)
@@ -207,9 +239,10 @@ def create_vids_from_excel(file_dir, sheet):
 			f.write(audio_data_split.read())
 		os.system("ffmpeg -y -i {} -ar 48000 {}".format("audio_uf.mp3", "audio_split.mp3"))
 
-		images_text = ' '.join(para.replace('*', '').replace('\n', ' \n ').split(' '))
+		images_text = ' '.join(para.strip().replace('*', '').replace('\n', ' \n ').split(' '))
 		print(images_text)
 		images = create_images(images_text, sheet.cell(row=i, column=3).value)
+		print("polly_para: "+polly_para)
 
 		create_para_vid(1, i-start-1, json_data, images, 'audio.mp3', "vid{}".format(str(i-start+1)))
 		create_para_vid(0.75, i-2, json_data_slow, images, 'audio_slow.mp3', "vid{}-slow".format(str(i-2)))
@@ -229,8 +262,10 @@ def create_vids_from_excel(file_dir, sheet):
 	os.system("rm a*.mp3")
 	os.system("rm *.in")
 	os.system("rm *_a*.mp3")
-	os.system("rm *.html")
+	# os.system("rm *.html")
 	os.system("rm -r images")
 
 #read_excel("input.xlsx")
-create_vids_from_excel(str(sys.argv[1]), str(sys.argv[2]))
+drive_link = str(sys.argv[1])
+sheet_name = str(sys.argv[2])
+create_vids_from_excel(drive_link, sheet_name)
