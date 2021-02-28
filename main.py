@@ -3,31 +3,8 @@ import os
 import sys
 import boto3
 import openpyxl
-import cv2
-import numpy as np
-from PIL import Image
+import shutil
 
-
-
-# def trim(im):
-# 	print("trim:{0}".format(im))
-# 	## (1) Convert to gray, and threshold
-# 	img = cv2.imread(im, cv2.IMREAD_UNCHANGED)
-# 	gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-# 	th, threshed = cv2.threshold(gray, 240, 255, cv2.THRESH_BINARY_INV)
-
-# 	## (2) Morph-op to remove noise
-# 	kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (11,11))
-# 	morphed = cv2.morphologyEx(threshed, cv2.MORPH_CLOSE, kernel)
-
-# 	## (3) Find the max-area contour
-# 	cnts = cv2.findContours(morphed, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)[-2]
-# 	cnt = sorted(cnts, key=cv2.contourArea)[-1]
-
-# 	## (4) Crop and save it
-# 	x,y,w,h = cv2.boundingRect(cnt)
-# 	dst = img[y:y+h, x:x+w]
-# 	cv2.imwrite(im, dst)
 
 
 def aws_polly(text, data_type):
@@ -125,7 +102,7 @@ def create_images(text, image):
 			text = '<h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0px; text-align:center">{1}</p></h1>'.format(7-no_of_lines, text_html)
 			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;">{0}<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;">{1}</div></div></body></html>'.format(img, text)
 		else:
-			text = '<div style="height: 720px; display: flex; justify-content: center; align-items: center;"><p style="margin: 0.5em; text-align:center">{}</p></div>'.format(text_html)
+			text = '<div style="height: 720px; display: flex; justify-content: center; align-items: center;"><h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0.5em; text-align:center">{1}</p></h1></div>'.format(7-no_of_lines, text_html)
 			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;"><h1 style="font-size: 7rem">{0}</h1></div></body></html>'.format(text)
 
 		with open("tmp.html", "w") as f:
@@ -139,11 +116,11 @@ def create_images(text, image):
 	return(images)
 
 
-def concatenate_videos(videos, output_name):
-	with open('con.in', 'w') as f:
+def concatenate_videos(videos, output_name, tmpdir):
+	with open('{}/con.in'.format(tmpdir), 'w') as f:
 		for video in videos:
-			f.write("file '{}'\n".format(video))
-	os.system("ffmpeg -y -f concat -safe 0 -i con.in -strict -2 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {}".format(output_name))
+			f.write("file '{0}/{1}'\n".format(tmpdir, video))
+	os.system("ffmpeg -y -f concat -safe 0 -i {0}/con.in -strict -2 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 {1}".format(tmpdir, output_name))
 
 
 def create_para_vid(speed, i, time_data, images, audio, output_name):
@@ -171,8 +148,7 @@ def create_para_vid(speed, i, time_data, images, audio, output_name):
 	with open('blank.in', 'w') as f:
 		f.write('\n'.join(["file '{0}'".format(images[-1]), "duration {}".format("1.3")]))
 	os.system("ffmpeg -y -i {0} -f concat -i blank.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 fill{1}.mp4".format("blank_long.mp3", str(i)))
-	output_name_mp4 = output_name + '.mp4'
-	concatenate_videos(['{0}nf.mp4'.format(output_name), 'fill{}.mp4'.format(i)], output_name_mp4)
+	concatenate_videos(['{0}nf.mp4'.format(output_name), 'fill{}.mp4'.format(i)], output_name+'.mp4', os.getcwd())
 
 
 def create_intro_video(sheet):
@@ -194,20 +170,25 @@ def create_intro_video(sheet):
 	with open('blank.in', 'w') as f:
 		f.write('\n'.join(["file \'images/{0}.jpg\'".format("intro"), "duration {}".format("2.5")]))
 	os.system("ffmpeg -y -i {0} -f concat -i blank.in -strict -2 -vsync vfr -pix_fmt yuv420p -vf fps=24 -video_track_timescale 90000 -max_muxing_queue_size 2048 -tune animation -crf 6 fill{1}.mp4".format("blank.mp3", "intro"))
-	concatenate_videos(["intronf.mp4", "fillintro.mp4"], "intro.mp4")
+	concatenate_videos(["intronf.mp4", "fillintro.mp4"], "intro.mp4", os.getcwd())
 	return("intro.mp4")
 
 
-def read_excel(drive_link, sheet):
-	name = "input.xlsx"
-	os.system("wget --no-check-certificate -r '{0}' -O {1}".format(drive_link, name))
+def read_excel(inpfile, sheet):
+	name = inpfile
 	wb = openpyxl.load_workbook(name)
+	print(wb.sheetnames)
 	return(wb[sheet])
 
 
-def create_vids_from_excel(drive_link, sheet):
+def create_vids_from_excel(inpfile, sheet, tmpdir):
+	mdir = os.getcwd()
+	files = ['pup.js', 'blank.mp3', 'blank_long.mp3']
+	for f in files:
+		shutil.copy(f, "{0}/{1}".format(tmpdir, f))
+	os.chdir(tmpdir)
 	os.system('mkdir images')
-	sheet = read_excel(drive_link, sheet)
+	sheet = read_excel(inpfile, sheet)
 	create_intro_video(sheet)
 	normal_videos = []
 	slow_videos = []
@@ -217,7 +198,7 @@ def create_vids_from_excel(drive_link, sheet):
 	for i in range(start, end):
 		if not sheet.cell(row=i, column=1).value:
 			continue
-		para = sheet.cell(row=i, column=2).value
+		para = sheet.cell(row=i, column=2).value.strip()
 		polly_para = para.replace("._", "").replace("_.", "").replace('*', '.').replace('#', '').replace('__', ' - ').replace('_', '').replace('\n','. ')
 		polly_para_split = polly_para.split()
 		polly_para = ""
@@ -252,20 +233,25 @@ def create_vids_from_excel(drive_link, sheet):
 		slow_videos.append("vid{}-slow.mp4".format(str(i-start+1)))
 		split_videos.append("vid{}-split.mp4".format(str(i-start+1)))
 
-	os.system("mkdir final_videos")
+	os.chdir(os.path.join(mdir, 'videos'))
+	os.system("mkdir {}".format(output_name.replace(' ', '\ ')))
+	os.chdir(os.path.join(os.getcwd(), output_name))
+	print(os.getcwd())
 
-	concatenate_videos(["intro.mp4"]+normal_videos, "final_videos/final.mp4")
-	concatenate_videos(["intro.mp4"]+slow_videos, "final_videos/final_slow.mp4")
-	concatenate_videos(["intro.mp4"]+split_videos, "final_videos/final_split.mp4")
+	concatenate_videos(["intro.mp4"]+normal_videos, "final.mp4", tmpdir)
+	concatenate_videos(["intro.mp4"]+slow_videos, "final_slow.mp4", tmpdir)
+	concatenate_videos(["intro.mp4"]+split_videos, "final_split.mp4", tmpdir)
 
-	os.system("rm *.mp4")
-	os.system("rm a*.mp3")
-	os.system("rm *.in")
-	os.system("rm *_a*.mp3")
+	# os.system("rm *.mp4")
+	# os.system("rm a*.mp3")
+	# os.system("rm *.in")
+	# os.system("rm *_a*.mp3")
 	# os.system("rm *.html")
-	os.system("rm -r images")
+	# os.system("rm -r images")
 
 #read_excel("input.xlsx")
-drive_link = str(sys.argv[1])
+inpfile = str(sys.argv[1])
 sheet_name = str(sys.argv[2])
-create_vids_from_excel(drive_link, sheet_name)
+tmpdir = str(sys.argv[3])
+output_name = str(sys.argv[4])
+create_vids_from_excel(inpfile, sheet_name, tmpdir)

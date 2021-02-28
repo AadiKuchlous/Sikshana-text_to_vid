@@ -1,3 +1,6 @@
+console.log(module.paths)
+module.paths.push('/Users/aadikuchlous/node_modules');
+console.log(module.paths)
 const puppeteer = require('puppeteer');
 
 (async () => {

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title></title>
+</head>
+<body>
+	<h2>{{header}}</h2>
+	<form enctype="multipart/form-data" method="POST" action="/form_submit">
+		<label for="sheetName">Excel Sheet: </label>
+		<select id="sheetName" name="sheetName">
+			{% for sheet in sheets %}
+				<option value="{{ sheet }}">{{ sheet }}</option>
+			{% endfor %}
+		</select>
+		<br><br>
+
+		<label for="lname">Video name:</label><br>
+		<input type="text" id="name" name="name" value=""><br><br>
+
+		<input type="checkbox" id="story" name="story" value="story">
+		<label for="story"> Story</label><br><br>
+
+		<input type="submit" value="Submit">
+	</form>
+</body>
+</html>
