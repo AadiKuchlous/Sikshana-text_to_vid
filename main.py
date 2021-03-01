@@ -56,7 +56,7 @@ def polly_json(text):
 def underline_html(text):
 	return text.replace("._", "<u>").replace("_.", "</u>")
 
-def create_images(text, image):
+def create_images(text, image, story=False):
 	no_of_lines = len(text.strip().split('\n'))
 	text = underline_html(text)
 	text = text.strip()
@@ -98,9 +98,15 @@ def create_images(text, image):
 		br = '<br>'
 
 		if type(image) == type(''):
-			img = '<div style="height:425px"><img src="{}" style="padding-top:30px"></img></div>'.format(image_name)
-			text = '<h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0px; text-align:center">{1}</p></h1>'.format(7-no_of_lines, text_html)
-			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;">{0}<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;">{1}</div></div></body></html>'.format(img, text)
+			if story:
+				img = '<div style="height:350px"><img src="{}" style="padding-top:30px"></img></div>'.format(image_name)
+				text = '<h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0px; text-align:center">{1}</p></h1>'.format(7-no_of_lines, text_html)
+				html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;">{0}<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;">{1}</div></div></body></html>'.format(img, text)
+
+			else:
+				img = '<div style="height:425px"><img src="{}" style="padding-top:30px"></img></div>'.format(image_name)
+				text = '<h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0px; text-align:center">{1}</p></h1>'.format(7-no_of_lines, text_html)
+				html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;">{0}<div style="height: 360px; display: flex; justify-content: center; align-items: flex-start;">{1}</div></div></body></html>'.format(img, text)
 		else:
 			text = '<div style="height: 720px; display: flex; justify-content: center; align-items: center;"><h1 style="font-size: {0}rem; margin: 0px"><p style="margin: 0.5em; text-align:center">{1}</p></h1></div>'.format(7-no_of_lines, text_html)
 			html = '<!DOCTYPE html><html><body style="margin:0px"><div id="vid_area" style="height: 720px; width: 1280px;"><h1 style="font-size: 7rem">{0}</h1></div></body></html>'.format(text)
@@ -181,7 +187,7 @@ def read_excel(inpfile, sheet):
 	return(wb[sheet])
 
 
-def create_vids_from_excel(inpfile, sheet, tmpdir):
+def create_vids_from_excel(inpfile, sheet, tmpdir, story):
 	mdir = os.getcwd()
 	files = ['pup.js', 'blank.mp3', 'blank_long.mp3']
 	for f in files:
@@ -222,7 +228,7 @@ def create_vids_from_excel(inpfile, sheet, tmpdir):
 
 		images_text = ' '.join(para.strip().replace('*', '').replace('\n', ' \n ').split(' '))
 		print(images_text)
-		images = create_images(images_text, sheet.cell(row=i, column=3).value)
+		images = create_images(images_text, sheet.cell(row=i, column=3).value, story)
 		print("polly_para: "+polly_para)
 
 		create_para_vid(1, i-start-1, json_data, images, 'audio.mp3', "vid{}".format(str(i-start+1)))
@@ -254,4 +260,5 @@ inpfile = str(sys.argv[1])
 sheet_name = str(sys.argv[2])
 tmpdir = str(sys.argv[3])
 output_name = str(sys.argv[4])
-create_vids_from_excel(inpfile, sheet_name, tmpdir)
+story = str(sys.argv[5])
+create_vids_from_excel(inpfile, sheet_name, tmpdir, story)

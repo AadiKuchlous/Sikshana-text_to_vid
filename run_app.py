@@ -35,19 +35,17 @@ def form_submit():
 		print("got POST")
 		sheetName = request.form["sheetName"]
 		videoName = request.form["name"]
-		file = request.files['file']
-		fileName = secure_filename(file.filename)
+		story = str(1 if len(request.form.getlist('story')) == 1 else 0)
 
 		if os.path.exists("videos/{}".format(videoName)):
-			return render_template('form.html', header="Videos with this name already exist")
+			return render_template('dataform.html', header="Videos with this name already exist")
 		else:
 			tmpdir = tempfile.mkdtemp()
-			file.save(os.path.join(tmpdir, 'input.xlsx'))
 			print(tmpdir)
-			cmd = 'main.py' + ' ' + 'input.xlsx' + ' ' + '"{}"'.format(str(sheetName)) + ' ' + '"{}"'.format(str(tmpdir)) + ' ' + '"{}"'.format(str(videoName)) #+ ' &'
+			cmd = 'main.py' + ' ' + 'input.xlsx' + ' ' + '"{}"'.format(str(sheetName)) + ' ' + '"{}"'.format(str(tmpdir)) + ' ' + '"{}"'.format(str(videoName)) + ' ' + story #+ ' &'
 			print(cmd)
-			os.system(cmd)
-			return 'File: ' + fileName + '; Sheet Name: ' + sheetName + '; Video Name: ' + videoName + '; Name available'
+			# os.system(cmd)
+			return 'Sheet: ' + sheetName + '; story: ' + story + '; Video Name: ' + videoName + '; Name available'
 
 @app.route('/files')
 @app.route('/files/<path:path>')
